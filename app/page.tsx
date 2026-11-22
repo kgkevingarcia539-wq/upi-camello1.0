@@ -85,7 +85,9 @@ async function ContenidoClima() {
     );
   }
 
-  const listaVeredas = await Promise.all(
+  let listaVeredas: any[] = [];
+  try {
+    listaVeredas = await Promise.all(
     veredas.map(async (vereda) => {
       const [lugarDetectado, clima, humedadSuelo] = await Promise.all([
         Promise.resolve("${vereda.nombre}, ${vereda.municipio}"),
@@ -143,6 +145,9 @@ async function ContenidoClima() {
       };
     })
   );
+  } catch (err: any) {
+    return <main className='p-6 text-center font-bold text-red-600'>Error API clima: {err?.message ?? String(err)}</main>;
+  }
 
   const hayLluviaGeneral = listaVeredas[0]?.lloviendo ?? false;
   return (
@@ -399,6 +404,7 @@ export default function PaginaPrincipal() {
     </Suspense>
   );
 }
+
 
 
 

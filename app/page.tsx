@@ -69,7 +69,7 @@ async function ContenidoClima() {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  const { data: veredasData } = await supabase.from('veredas').select('*');
+  const { data: veredasData, error: veredasError } = await supabase.from('veredas').select('*');
   const { data: nivelesData } = await supabase.from('niveles_humedad').select('*');
 
   const veredas: Vereda[] = veredasData ?? [];
@@ -79,7 +79,7 @@ async function ContenidoClima() {
     return (
       <main className="p-6 text-center">
         <p className="text-lg font-bold text-red-700">
-          No se encontraron veredas en la base de datos.
+          No se encontraron veredas. URL: {supabaseUrl} | Error: {veredasError?.message ?? 'ninguno (0 filas)'}
         </p>
       </main>
     );
@@ -399,5 +399,6 @@ export default function PaginaPrincipal() {
     </Suspense>
   );
 }
+
 
 

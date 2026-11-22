@@ -1,3 +1,4 @@
+@'
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import {
@@ -5,6 +6,8 @@ import {
   consultarClimaAire,
   consultarHumedadSuelo,
 } from '@/lib/clima';
+
+export const dynamic = 'force-dynamic';
 
 interface Vereda {
   id: number;
@@ -22,11 +25,6 @@ interface NivelHumedad {
   color: string;
   mensaje: string;
 }
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
 
 function esClimaLluvioso(precipitacion: number, codigoClima: number): boolean {
   return precipitacion > 0 || codigoClima >= 51;
@@ -55,6 +53,21 @@ function formatearDia(fechaIso: string): string {
 }
 
 export default async function PaginaPrincipal() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return (
+      <main className="p-6 text-center">
+        <p className="text-lg font-bold text-red-700">
+          Faltan configurar las variables de Supabase en Vercel.
+        </p>
+      </main>
+    );
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
   const { data: veredasData } = await supabase.from('veredas').select('*');
   const { data: nivelesData } = await supabase.from('niveles_humedad').select('*');
 
@@ -64,7 +77,7 @@ export default async function PaginaPrincipal() {
   if (veredas.length === 0) {
     return (
       <main className="p-6 text-center">
-        <p className="text-xl font-bold text-red-700">
+        <p className="text-lg font-bold text-red-700">
           No se encontraron veredas en la base de datos.
         </p>
       </main>
@@ -89,7 +102,6 @@ export default async function PaginaPrincipal() {
         clima.current.weather_code
       );
 
-      // Próximas 24 horas en bloques de 3 horas (estilo Google)
       const horaActualIso = clima.current.time.slice(0, 13);
       const inicioHora = clima.hourly.time.findIndex((t) =>
         t.startsWith(horaActualIso)
@@ -110,7 +122,6 @@ export default async function PaginaPrincipal() {
         });
       }
 
-      // Próximos 7 días (dom, lun, mar...)
       const proximosDias = clima.daily.time.map((diaIso, idx) => ({
         dia: formatearDia(diaIso),
         icono: obtenerIconoClima(clima.daily.weather_code[idx]),
@@ -136,37 +147,39 @@ export default async function PaginaPrincipal() {
 
   return (
     <div
-      className={`min-h-screen pb-24 transition-colors duration-500 ${
+      className={`min-h-screen w-full overflow-x-hidden pb-24 transition-colors duration-500 ${
         hayLluviaGeneral
           ? 'bg-slate-950 text-slate-100'
           : 'bg-sky-100 text-slate-900'
       }`}
     >
-      {/* Encabezado dinámico */}
       <header
-        className={`p-5 shadow-md transition-colors duration-500 ${
+        className={`px-4 py-4 sm:p-5 shadow-md transition-colors duration-500 ${
           hayLluviaGeneral
             ? 'bg-slate-900 text-white border-b border-slate-800'
             : 'bg-gradient-to-r from-blue-700 to-sky-600 text-white'
         }`}
       >
-        <div className="max-w-lg mx-auto flex justify-between items-center">
+        <div className="max-w-lg mx-auto flex justify-between items-center gap-2">
           <div>
-            <h1 className="text-3xl font-black tracking-tight">upi-camello</h1>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
+              upi-camello
+            </h1>
             <p
-              className={`text-sm mt-1 ${
+              className={`text-xs sm:text-sm mt-0.5 ${
                 hayLluviaGeneral ? 'text-slate-400' : 'text-sky-100'
               }`}
             >
               Clima y humedad de la tierra · Barranca de Upía
             </p>
           </div>
-          <span className="text-4xl">{hayLluviaGeneral ? '🌧️' : '⛅'}</span>
+          <span className="text-3xl sm:text-4xl shrink-0">
+            {hayLluviaGeneral ? '🌧️' : '⛅'}
+          </span>
         </div>
       </header>
 
-      {/* Tarjetas de veredas */}
-      <main className="max-w-lg mx-auto p-4 space-y-6">
+      <main className="max-w-lg mx-auto px-3 py-4 sm:p-4 space-y-5">
         {listaVeredas.map(
           ({
             vereda,
@@ -180,17 +193,16 @@ export default async function PaginaPrincipal() {
           }) => (
             <article
               key={vereda.id}
-              className={`rounded-3xl p-5 shadow-lg border transition-colors ${
+              className={`rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-lg border transition-colors ${
                 lloviendo
                   ? 'bg-slate-900 border-slate-800 text-white'
                   : 'bg-gradient-to-b from-blue-600 to-sky-500 border-blue-400 text-white'
               }`}
             >
-              {/* Cabecera de la vereda */}
-              <div className="flex justify-between items-start pb-4">
-                <div>
+              <div className="flex justify-between items-start gap-2 pb-3 sm:pb-4">
+                <div className="min-w-0 flex-1">
                   <span
-                    className={`inline-block text-xs font-bold uppercase px-2.5 py-0.5 rounded-full mb-1.5 ${
+                    className={`inline-block text-[11px] sm:text-xs font-bold uppercase px-2.5 py-0.5 rounded-full mb-1.5 ${
                       lloviendo
                         ? 'bg-slate-800 text-sky-400'
                         : 'bg-white/20 text-white'
@@ -198,68 +210,76 @@ export default async function PaginaPrincipal() {
                   >
                     {lloviendo ? '🌧️ Clima lluvioso' : '☀️ Tiempo seco'}
                   </span>
-                  <h2 className="text-2xl font-extrabold">{vereda.nombre}</h2>
-                  <p className="text-sm opacity-90">{vereda.municipio}</p>
-                  <p className="text-xs opacity-75 mt-1">
+                  <h2 className="text-xl sm:text-2xl font-extrabold break-words leading-tight">
+                    {vereda.nombre}
+                  </h2>
+                  <p className="text-xs sm:text-sm opacity-90">
+                    {vereda.municipio}
+                  </p>
+                  <p className="text-[11px] sm:text-xs opacity-75 mt-1 break-words">
                     📍 {lugarDetectado} ({vereda.latitud}, {vereda.longitud})
                   </p>
                 </div>
 
-                <div className="text-right">
-                  <span className="text-5xl font-black">
+                <div className="text-right shrink-0">
+                  <span className="text-4xl sm:text-5xl font-black leading-none">
                     {Math.round(clima.current.temperature_2m)}°
                   </span>
-                  <p className="text-xs opacity-80 mt-1">
-                    Lluvia: {clima.current.precipitation} mm · Viento:{' '}
-                    {Math.round(clima.current.wind_speed_10m)} km/h
+                  <p className="text-[11px] sm:text-xs opacity-80 mt-1.5">
+                    💧 {clima.current.precipitation} mm
+                  </p>
+                  <p className="text-[11px] sm:text-xs opacity-80">
+                    💨 {Math.round(clima.current.wind_speed_10m)} km/h
                   </p>
                 </div>
               </div>
 
-              {/* Semáforo de humedad del suelo */}
               {semaforo ? (
                 <div
                   style={{ backgroundColor: semaforo.color }}
-                  className="text-white p-4 rounded-2xl mb-4 shadow-sm border border-white/15"
+                  className="text-white p-3.5 sm:p-4 rounded-xl sm:rounded-2xl mb-3 sm:mb-4 shadow-sm border border-white/15"
                 >
-                  <p className="text-lg font-black uppercase tracking-wide">
+                  <p className="text-base sm:text-lg font-black uppercase tracking-wide">
                     Tierra {semaforo.nombre}
                   </p>
-                  <p className="text-sm font-medium mt-0.5">{semaforo.mensaje}</p>
-                  <p className="text-xs opacity-90 mt-1.5">
+                  <p className="text-xs sm:text-sm font-medium mt-0.5 leading-snug">
+                    {semaforo.mensaje}
+                  </p>
+                  <p className="text-[11px] sm:text-xs opacity-90 mt-1.5">
                     Humedad estimada: {humedadSuelo.valor} m³/m³
                   </p>
                 </div>
               ) : (
-                <div className="bg-black/20 p-3 rounded-2xl mb-4">
-                  <p className="font-bold">
+                <div className="bg-black/20 p-3 rounded-xl mb-3">
+                  <p className="text-sm font-bold">
                     Humedad del suelo: {humedadSuelo.valor} m³/m³
                   </p>
                 </div>
               )}
 
-              {/* FILA 1: Pronóstico por horas (cada 3 horas, estilo Google) */}
               <div
-                className={`rounded-2xl p-3 mb-3 ${
+                className={`rounded-xl sm:rounded-2xl p-2.5 sm:p-3 mb-2.5 sm:mb-3 ${
                   lloviendo ? 'bg-slate-800/80' : 'bg-blue-950/20'
                 }`}
               >
-                <p className="text-xs font-bold uppercase opacity-75 mb-2 px-1">
+                <p className="text-[11px] sm:text-xs font-bold uppercase opacity-75 mb-2 px-1">
                   Por horas
                 </p>
-                <div className="flex overflow-x-auto gap-4 pb-1 text-center">
+                <div className="flex overflow-x-auto gap-3 sm:gap-4 pb-1 text-center">
                   {proximasHoras.map((h, i) => (
                     <div
                       key={i}
-                      className="flex-shrink-0 w-14 flex flex-col items-center space-y-1"
+                      className="shrink-0 w-12 sm:w-14 flex flex-col items-center space-y-1"
                     >
-                      <span className="text-xs opacity-80 font-medium">
+                      <span className="text-[11px] sm:text-xs opacity-80 font-medium">
                         {h.hora}
                       </span>
-                      <span className="text-2xl">{h.icono}</span>
-                      <span className="text-sm font-bold">{h.temp}°</span>
+                      <span className="text-xl sm:text-2xl">{h.icono}</span>
+                      <span className="text-xs sm:text-sm font-bold">
+                        {h.temp}°
+                      </span>
                       {h.probLluvia > 0 && (
-                        <span className="text-[11px] font-bold text-sky-300">
+                        <span className="text-[10px] sm:text-[11px] font-bold text-sky-300">
                           💧{h.probLluvia}%
                         </span>
                       )}
@@ -268,17 +288,16 @@ export default async function PaginaPrincipal() {
                 </div>
               </div>
 
-              {/* FILA 2: Pronóstico por días (dom, lun, mar..., estilo Google) */}
               <div
-                className={`rounded-2xl p-3 ${
+                className={`rounded-xl sm:rounded-2xl p-2.5 sm:p-3 ${
                   lloviendo ? 'bg-slate-800/80' : 'bg-blue-950/20'
                 }`}
               >
-                   <div className="flex overflow-x-auto gap-2 text-center">
+                <div className="flex overflow-x-auto gap-1.5 sm:gap-2 text-center">
                   {proximosDias.map((d, i) => (
                     <div
                       key={i}
-                      className={`flex-shrink-0 w-16 py-2 px-1 rounded-xl flex flex-col items-center space-y-1.5 ${
+                      className={`shrink-0 w-14 sm:w-16 py-2 px-1 rounded-xl flex flex-col items-center space-y-1 ${
                         d.esHoy
                           ? lloviendo
                             ? 'bg-slate-700/90'
@@ -286,9 +305,11 @@ export default async function PaginaPrincipal() {
                           : ''
                       }`}
                     >
-                      <span className="text-sm font-semibold">{d.dia}</span>
-                      <span className="text-2xl">{d.icono}</span>
-                      <div className="text-xs font-bold">
+                      <span className="text-xs sm:text-sm font-semibold">
+                        {d.dia}
+                      </span>
+                      <span className="text-xl sm:text-2xl">{d.icono}</span>
+                      <div className="text-[11px] sm:text-xs font-bold">
                         <span>{d.max}°</span>{' '}
                         <span className="opacity-65 font-normal">{d.min}°</span>
                       </div>
@@ -297,7 +318,7 @@ export default async function PaginaPrincipal() {
                 </div>
               </div>
 
-              <p className="text-[11px] opacity-75 mt-3">
+              <p className="text-[10px] sm:text-[11px] opacity-75 mt-2.5">
                 Estimación para la zona · Actualizado:{' '}
                 {clima.current.time.replace('T', ' ')}
               </p>
@@ -305,7 +326,6 @@ export default async function PaginaPrincipal() {
           )
         )}
 
-        {/* Créditos obligatorios */}
         <footer
           className={`text-center text-xs pt-2 space-y-1 ${
             hayLluviaGeneral ? 'text-slate-400' : 'text-slate-600'
@@ -326,15 +346,14 @@ export default async function PaginaPrincipal() {
         </footer>
       </main>
 
-      {/* Menú inferior para celular */}
       <nav
-        className={`fixed bottom-0 left-0 right-0 border-t p-3 shadow-lg transition-colors ${
+        className={`fixed bottom-0 left-0 right-0 border-t p-2.5 sm:p-3 shadow-lg transition-colors ${
           hayLluviaGeneral
             ? 'bg-slate-950 border-slate-800 text-slate-200'
             : 'bg-white border-sky-200 text-slate-800'
         }`}
       >
-        <div className="max-w-lg mx-auto grid grid-cols-3 gap-2 text-center font-bold text-base">
+        <div className="max-w-lg mx-auto grid grid-cols-3 gap-2 text-center font-bold text-sm sm:text-base">
           <Link
             href="/"
             className={`py-2 rounded-xl text-white ${

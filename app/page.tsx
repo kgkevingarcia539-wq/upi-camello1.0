@@ -1,4 +1,5 @@
-﻿
+﻿import { connection } from 'next/server';
+
 import { Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -52,6 +53,7 @@ function formatearDia(fechaIso: string): string {
 }
 
 async function ContenidoClima() {
+  await connection();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -397,3 +399,4 @@ export default function PaginaPrincipal() {
     </Suspense>
   );
 }
+

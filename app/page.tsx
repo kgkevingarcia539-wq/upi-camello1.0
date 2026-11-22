@@ -54,8 +54,8 @@ function formatearDia(fechaIso: string): string {
 
 async function ContenidoClima() {
   await connection();
-  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://yixyhbhwfirfuxmawxro.supabase.co');
-  const supabaseKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_o34p68iXWI_iR8uZnudoxw_yrhDGCoa');
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://yixyhbhwfirfuxmawxro.supabase.co';
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_o34p68iXWI_iR8uZnudoxw_yrhDGCoa';
 
   if (!supabaseUrl || !supabaseKey) {
     return (
@@ -399,6 +399,7 @@ export default function PaginaPrincipal() {
     </Suspense>
   );
 }
+
 
 
 

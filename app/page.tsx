@@ -88,7 +88,7 @@ async function ContenidoClima() {
   const listaVeredas = await Promise.all(
     veredas.map(async (vereda) => {
       const [lugarDetectado, clima, humedadSuelo] = await Promise.all([
-        consultarLugarPorCoordenadas(vereda.latitud, vereda.longitud),
+        Promise.resolve("${vereda.nombre}, ${vereda.municipio}"),
         consultarClimaAire(vereda.latitud, vereda.longitud),
         consultarHumedadSuelo(vereda.latitud, vereda.longitud),
       ]);
@@ -399,6 +399,7 @@ export default function PaginaPrincipal() {
     </Suspense>
   );
 }
+
 
 
 

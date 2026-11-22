@@ -89,7 +89,7 @@ async function ContenidoClima() {
   try {
     listaVeredas = await Promise.all(
     veredas.map(async (vereda) => {
-      const [lugarDetectado, clima, humedadSuelo] = await Promise.all([
+      try { const [lugarDetectado, clima, humedadSuelo] = await Promise.all([
         Promise.resolve("${vereda.nombre}, ${vereda.municipio}"),
         consultarClimaAire(vereda.latitud, vereda.longitud),
         consultarHumedadSuelo(vereda.latitud, vereda.longitud),
@@ -111,7 +111,7 @@ async function ContenidoClima() {
       );
       const indiceBase = inicioHora >= 0 ? inicioHora : 0;
 
-      const proximasHoras = [];
+      const proximasHoras: { hora: string; temp: number; probLluvia: number; icono: string }[] = [];
       for (
         let i = indiceBase;
         i < indiceBase + 24 && i < clima.hourly.time.length;
@@ -125,7 +125,7 @@ async function ContenidoClima() {
         });
       }
 
-      const proximosDias = clima.daily.time.map((diaIso, idx) => ({
+      const proximosDias: { dia: string; icono: string; max: number; min: number; esHoy: boolean }[] = clima.daily.time.map((diaIso, idx) => ({
         dia: formatearDia(diaIso),
         icono: obtenerIconoClima(clima.daily.weather_code[idx]),
         max: Math.round(clima.daily.temperature_2m_max[idx]),
@@ -141,15 +141,15 @@ async function ContenidoClima() {
         semaforo,
         lloviendo,
         proximasHoras,
-        proximosDias,
-      };
+        proximosDias, }; } catch { return null; }
     })
   );
   } catch (err: any) {
     return <main className='p-6 text-center font-bold text-red-600'>Error API clima: {err?.message ?? String(err)}</main>;
   }
 
-  const hayLluviaGeneral = listaVeredas[0]?.lloviendo ?? false;
+  const veredasValidas = listaVeredas.filter((v): v is NonNullable<typeof v> => v !== null);
+  const hayLluviaGeneral = veredasValidas[0]?.lloviendo ?? false;
   return (
     <div
       className={`min-h-screen w-full overflow-x-hidden pb-24 transition-colors duration-500 ${
@@ -185,7 +185,7 @@ async function ContenidoClima() {
       </header>
 
       <main className="max-w-lg mx-auto px-3 py-4 sm:p-4 space-y-5">
-        {listaVeredas.map(
+        {veredasValidas.map(
           ({
             vereda,
             lugarDetectado,
@@ -271,7 +271,7 @@ async function ContenidoClima() {
                   Por horas
                 </p>
                 <div className="flex overflow-x-auto gap-3 sm:gap-4 pb-1 text-center">
-                  {proximasHoras.map((h, i) => (
+                  {proximasHoras.map((h: any, i: number) => (
                     <div
                       key={i}
                       className="shrink-0 w-12 sm:w-14 flex flex-col items-center space-y-1"
@@ -299,7 +299,7 @@ async function ContenidoClima() {
                 }`}
               >
                 <div className="flex overflow-x-auto gap-1.5 sm:gap-2 text-center">
-                  {proximosDias.map((d, i) => (
+                  {proximosDias.map((d: any, i: number) => (
                     <div
                       key={i}
                       className={`shrink-0 w-14 sm:w-16 py-2 px-1 rounded-xl flex flex-col items-center space-y-1 ${
@@ -404,6 +404,12 @@ export default function PaginaPrincipal() {
     </Suspense>
   );
 }
+
+
+
+
+
+
 
 
 

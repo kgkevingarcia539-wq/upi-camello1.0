@@ -121,18 +121,9 @@ export default function PaginaMapa() {
   const latCentro = seleccionado?.latitud ?? 4.5697;
   const lonCentro = seleccionado?.longitud ?? -72.9667;
 
-  const urlMapaGoogleEmbed =
-    'https://google.com' +
-    latCentro +
-    ',' +
-    lonCentro +
-    '&z=13&output=embed';
+  const urlMapaGoogleEmbed = 'https://google.com' + latCentro + ',' + lonCentro + '&z=13&output=embed';
 
-  const urlAbrirGoogleMaps =
-    'https://google.com' +
-    latCentro +
-    ',' +
-    lonCentro;
+  const urlAbrirGoogleMaps = 'https://google.com' + latCentro + ',' + lonCentro;
 
   return (
     <div className="min-h-screen bg-sky-100 text-slate-900 pb-24">
@@ -286,3 +277,4 @@ export default function PaginaMapa() {
     </div>
   );
 }
+

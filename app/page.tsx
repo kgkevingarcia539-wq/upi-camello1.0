@@ -1,4 +1,4 @@
-﻿
+
 import { Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -7,9 +7,6 @@ import {
   consultarClimaAire,
   consultarHumedadSuelo,
 } from '@/lib/clima';
-
-export const dynamic = 'force-dynamic';
-
 interface Vereda {
   id: string | number;
   nombre: string;
@@ -114,13 +111,13 @@ function limpiarVeredas(veredas: Vereda[]) {
 }
 
 function iconoClima(codigo: number) {
-  if (codigo === 0) return '☀️';
-  if (codigo <= 3) return '⛅';
-  if (codigo <= 48) return '☁️';
-  if (codigo <= 67) return '🌧️';
-  if (codigo <= 77) return '❄️';
-  if (codigo <= 82) return '🌦️';
-  return '⛈️';
+  if (codigo === 0) return '??';
+  if (codigo <= 3) return '?';
+  if (codigo <= 48) return '??';
+  if (codigo <= 67) return '???';
+  if (codigo <= 77) return '??';
+  if (codigo <= 82) return '???';
+  return '??';
 }
 
 function obtenerNivel(
@@ -254,7 +251,7 @@ async function ContenidoVeredas() {
         <div className="max-w-6xl mx-auto">
 
           <h1 className="text-3xl font-black">
-            🌱 upi-camello
+            ?? upi-camello
           </h1>
 
           <p className="mt-1 text-sm text-blue-100">
@@ -295,7 +292,7 @@ async function ContenidoVeredas() {
         </div>
 
         <h2 className="text-2xl font-black text-slate-800 mb-4">
-          📍 Clima por vereda
+          ?? Clima por vereda
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -313,7 +310,7 @@ async function ContenidoVeredas() {
                 >
 
                   <h3 className="text-xl font-black text-slate-800">
-                    📍 {r.vereda.nombre}
+                    ?? {r.vereda.nombre}
                   </h3>
 
                   <p className="text-xs text-slate-500 mt-1">
@@ -405,7 +402,7 @@ async function ContenidoVeredas() {
                     <div className="bg-sky-50 rounded-xl p-3">
 
                       <p className="text-xs text-slate-500">
-                        🌧️ Precipitación
+                        ??? Precipitación
                       </p>
 
                       <p className="text-xl font-black text-sky-800">
@@ -417,7 +414,7 @@ async function ContenidoVeredas() {
                     <div className="bg-sky-50 rounded-xl p-3">
 
                       <p className="text-xs text-slate-500">
-                        💨 Viento
+                        ?? Viento
                       </p>
 
                       <p className="text-xl font-black text-sky-800">
@@ -435,7 +432,7 @@ async function ContenidoVeredas() {
                       <div>
 
                         <p className="text-xs font-bold text-slate-500 uppercase">
-                          🌱 Humedad del suelo
+                          ?? Humedad del suelo
                         </p>
 
                         <p className="text-3xl font-black text-blue-800">
@@ -445,7 +442,7 @@ async function ContenidoVeredas() {
                       </div>
 
                       <span className="text-4xl">
-                        🌿
+                        ??
                       </span>
 
                     </div>
@@ -498,7 +495,7 @@ async function ContenidoVeredas() {
                   <div className="mt-5">
 
                     <h4 className="font-black text-slate-700 mb-3">
-                      🕒 Pronóstico por horas
+                      ?? Pronóstico por horas
                     </h4>
 
                     <div className="flex gap-4 overflow-x-auto pb-3">
@@ -537,7 +534,7 @@ async function ContenidoVeredas() {
                               </p>
 
                               <p className="text-xs text-blue-600">
-                                💧
+                                ??
                                 {clima.hourly.precipitation_probability[i] ?? 0}%
                               </p>
 
@@ -552,7 +549,7 @@ async function ContenidoVeredas() {
                   <div className="mt-3">
 
                     <h4 className="font-black text-slate-700 mb-3">
-                      📅 Próximos días
+                      ?? Próximos días
                     </h4>
 
                     <div className="grid grid-cols-5 gap-2">
@@ -659,7 +656,7 @@ export default function PaginaPrincipal() {
       fallback={
         <div className="min-h-screen flex items-center justify-center bg-sky-100">
           <p className="text-xl font-black text-blue-800">
-            🌱 Consultando las veredas...
+            ?? Consultando las veredas...
           </p>
         </div>
       }
@@ -668,3 +665,4 @@ export default function PaginaPrincipal() {
     </Suspense>
   );
 }
+

@@ -118,8 +118,8 @@ export default function PaginaMapa() {
     ubicarme();
   }, []);
 
-  const latCentro = seleccionado?.latitud ?? 4.5697;
-  const lonCentro = seleccionado?.longitud ?? -72.9667;
+  const latCentro = Number(seleccionado?.latitud) || 4.5697;
+  const lonCentro = Number(seleccionado?.longitud) || -72.9667;
 
   const urlMapaGoogleEmbed = 'https://google.com' + latCentro + ',' + lonCentro + '&z=13&output=embed';
 
@@ -277,4 +277,5 @@ export default function PaginaMapa() {
     </div>
   );
 }
+
 

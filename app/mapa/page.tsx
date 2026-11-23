@@ -37,7 +37,41 @@ export default function PaginaMapa() {
   const [puntos, setPuntos] = useState<PuntoMapa[]>([]);
   const [seleccionado, setSeleccionado] = useState<PuntoMapa | null>(null);
   const [miUbicacion, setMiUbicacion] = useState<{ lat: number; lon: number } | null>(null);
+  const [estadoGps, setEstadoGps] = useState<string>('📡 Buscando tu ubicación GPS...');
   const [cargando, setCargando] = useState(true);
+
+  function ubicarme() {
+    if (!navigator.geolocation) {
+      setEstadoGps('Tu celular o navegador no soporta GPS.');
+      return;
+    }
+
+    setEstadoGps('📡 Solicitando permiso de ubicación GPS...');
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        setMiUbicacion(coords);
+        setEstadoGps('✅ Ubicación GPS activa (distancias calculadas)');
+        setSeleccionado({
+          id: 'gps-actual',
+          titulo: 'Mi ubicación actual',
+          subtitulo: 'GPS del celular',
+          latitud: coords.lat,
+          longitud: coords.lon,
+          tipo: 'finca',
+        });
+      },
+      (error) => {
+        if (error.code === error.PERMISSION_DENIED) {
+          setEstadoGps('⚠️ Ubicación bloqueada. Actívala en el ícono 🔒 de la barra de arriba.');
+        } else {
+          setEstadoGps('⚠️ No se pudo detectar el GPS. Toca "Activar" para reintentar.');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
 
   useEffect(() => {
     async function cargarPuntos() {
@@ -71,39 +105,34 @@ export default function PaginaMapa() {
           });
         });
 
-     
         setPuntos(lista);
         if (lista.length > 0) {
-          setSeleccionado(lista[0]);
+          setSeleccionado((prev) => prev ?? lista[0]);
         }
       } finally {
         setCargando(false);
       }
     }
+
     cargarPuntos();
+    ubicarme();
   }, []);
-
-
-  function ubicarme() {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition((pos) => {
-      const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-      setMiUbicacion(coords);
-      setSeleccionado({
-        id: 'gps-actual',
-        titulo: 'Mi ubicación actual',
-        subtitulo: 'GPS del celular',
-        latitud: coords.lat,
-        longitud: coords.lon,
-        tipo: 'finca',
-      });
-    });
-  }
 
   const latCentro = seleccionado?.latitud ?? 4.5697;
   const lonCentro = seleccionado?.longitud ?? -72.9667;
-  const bbox = (lonCentro - 0.04) + ',' + (latCentro - 0.04) + ',' + (lonCentro + 0.04) + ',' + (latCentro + 0.04);
-  const urlMapaOsm = 'https://openstreetmap.org' + bbox + '&layer=mapnik&marker=' + latCentro + ',' + lonCentro;
+
+  const urlMapaGoogleEmbed =
+    'https://google.com' +
+    latCentro +
+    ',' +
+    lonCentro +
+    '&z=13&output=embed';
+
+  const urlAbrirGoogleMaps =
+    'https://google.com' +
+    latCentro +
+    ',' +
+    lonCentro;
 
   return (
     <div className="min-h-screen bg-sky-100 text-slate-900 pb-24">
@@ -125,23 +154,50 @@ export default function PaginaMapa() {
       </header>
 
       <main className="max-w-lg mx-auto px-3 py-4 space-y-4">
+        <div className="bg-white border border-sky-200 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2 text-xs font-bold text-blue-950 shadow-sm">
+          <span>{estadoGps}</span>
+          {!miUbicacion && (
+            <button
+              onClick={ubicarme}
+              className="bg-blue-700 text-white px-3 py-1 rounded-lg shrink-0"
+            >
+              Activar
+            </button>
+          )}
+        </div>
+
         <div className="bg-white rounded-2xl overflow-hidden shadow-md border border-sky-200">
-          <iframe
-            title="Mapa OpenStreetMap"
-            src={urlMapaOsm}
-            className="w-full h-72 border-0"
-            loading="lazy"
-          />
+          <div className="relative w-full h-72">
+            <iframe
+              title="Mapa Google Barranca de Upía"
+              src={urlMapaGoogleEmbed}
+              className="w-full h-72 border-0"
+              loading="lazy"
+            />
+            <a
+              href={urlAbrirGoogleMaps}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Abrir en Google Maps"
+              className="absolute inset-0 z-10 flex items-end justify-end p-3 bg-transparent hover:bg-black/5 transition"
+            >
+              <span className="bg-white/95 text-blue-900 text-xs font-extrabold px-3 py-1.5 rounded-full shadow border border-sky-200">
+                🗺️ Toca para abrir en Google Maps
+              </span>
+            </a>
+          </div>
+
           {seleccionado && (
             <div className="p-3 bg-blue-950 text-white flex justify-between items-center text-xs">
               <div>
                 <p className="font-extrabold text-sm">{seleccionado.titulo}</p>
                 <p className="opacity-80">
-                  {seleccionado.subtitulo} · {seleccionado.latitud.toFixed(4)}, {seleccionado.longitud.toFixed(4)}
+                  {seleccionado.subtitulo} · {seleccionado.latitud.toFixed(4)},{' '}
+                  {seleccionado.longitud.toFixed(4)}
                 </p>
               </div>
               <a
-                href={'https://google.com' + seleccionado.latitud + ',' + seleccionado.longitud}
+                href={urlAbrirGoogleMaps}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="bg-sky-500 text-white px-3 py-1.5 rounded-lg font-bold shrink-0"
@@ -215,18 +271,14 @@ export default function PaginaMapa() {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-sky-200 p-2.5 shadow-lg text-slate-800">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-sky-200 p-2.5 shadow-lg text-slate-800">
         <div className="max-w-lg mx-auto grid grid-cols-3 gap-2 text-center font-bold text-sm">
-          <Link href="/" className="py-2 rounded-xl hover:bg-sky-50">
-            Veredas
-          </Link>
-          <Link href="/mi-finca" className="py-2 rounded-xl hover:bg-sky-50">
-            Mi finca
-          </Link>
-          <Link href="/mapa" className="py-2 rounded-xl text-white bg-blue-700">
-            Mapa
-          </Link>
+          <Link href="/" className="py-2 rounded-xl hover:bg-sky-50">Veredas</Link>
+          <Link href="/mi-finca" className="py-2 rounded-xl hover:bg-sky-50">Mi finca</Link>
+          <Link href="/mapa" className="py-2 rounded-xl text-white bg-blue-700">Mapa</Link>
         </div>
       </nav>
     </div>
   );
 }
+

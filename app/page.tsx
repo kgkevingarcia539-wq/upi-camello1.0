@@ -1,5 +1,5 @@
-﻿import { connection } from 'next/server';
-
+﻿
+import { connection } from 'next/server';
 import { Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -364,25 +364,19 @@ async function ContenidoClima() {
             className={`py-2 rounded-xl text-white ${
               hayLluviaGeneral ? 'bg-blue-600' : 'bg-blue-700'
             }`}
-          >
-            Veredas
-          </Link>
+          >Veredas</Link>
           <Link
             href="/mi-finca"
             className={`py-2 rounded-xl ${
               hayLluviaGeneral ? 'hover:bg-slate-800' : 'hover:bg-sky-50'
             }`}
-          >
-            Mi finca
-          </Link>
+          >Mi finca</Link>
           <Link
             href="/mapa"
             className={`py-2 rounded-xl ${
               hayLluviaGeneral ? 'hover:bg-slate-800' : 'hover:bg-sky-50'
             }`}
-          >
-            Mapa
-          </Link>
+          >Mapa</Link>
         </div>
       </nav>
     </div>
@@ -404,6 +398,7 @@ export default function PaginaPrincipal() {
     </Suspense>
   );
 }
+
 
 
 

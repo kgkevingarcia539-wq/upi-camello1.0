@@ -225,12 +225,17 @@ export default function PaginaMapa() {
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-sky-200 p-2.5 shadow-lg text-slate-800">
         <div className="max-w-lg mx-auto grid grid-cols-3 gap-2 text-center font-bold text-sm">
-          <Link href="/" className="py-2 rounded-xl hover:bg-sky-50">Veredas</Link>
-          <Link href="/mi-finca" className="py-2 rounded-xl hover:bg-sky-50">Mi finca</Link>
-          <Link href="/mapa" className="py-2 rounded-xl text-white bg-blue-700">Mapa</Link>
+          <Link href="/" className="py-2 rounded-xl hover:bg-sky-50">
+            Veredas
+          </Link>
+          <Link href="/mi-finca" className="py-2 rounded-xl text-white bg-blue-700">
+            Mi finca
+          </Link>
+          <Link href="/mapa" className="py-2 rounded-xl hover:bg-sky-50">
+            Mapa
+          </Link>
         </div>
       </nav>
     </div>
   );
 }
-

@@ -4,7 +4,6 @@ import { Suspense } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import Link from 'next/link';
 import {
-  consultarLugarPorCoordenadas,
   consultarClimaAire,
   consultarHumedadSuelo,
 } from '@/lib/clima';
@@ -26,359 +25,518 @@ interface NivelHumedad {
   mensaje: string;
 }
 
-function esClimaLluvioso(precipitacion: number, codigoClima: number): boolean {
-  return precipitacion > 0 || codigoClima >= 51;
+const MUNICIPIO = 'barranca de upia';
+
+const EXCLUIDAS = new Set([
+  'guanapalo',
+]);
+
+function normalizar(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
 }
 
-function obtenerIconoClima(codigo: number): string {
+function limpiarVeredas(veredas: Vereda[]): Vereda[] {
+  const unicas = new Map<string, Vereda>();
+
+  veredas.forEach((v) => {
+    if (!v.nombre || !v.municipio) return;
+
+    const nombre = normalizar(v.nombre);
+    const municipio = normalizar(v.municipio);
+
+    if (!municipio.includes(MUNICIPIO)) return;
+    if (EXCLUIDAS.has(nombre)) return;
+
+    if (
+      !Number.isFinite(Number(v.latitud)) ||
+      !Number.isFinite(Number(v.longitud)) ||
+      Number(v.latitud) < -90 ||
+      Number(v.latitud) > 90 ||
+      Number(v.longitud) < -180 ||
+      Number(v.longitud) > 180
+    ) return;
+
+    const clave = `${municipio}-${nombre}`;
+
+    if (!unicas.has(clave)) {
+      unicas.set(clave, v);
+    }
+  });
+
+  return [...unicas.values()];
+}
+
+function iconoClima(codigo: number): string {
   if (codigo === 0) return '☀️';
   if (codigo <= 3) return '⛅';
   if (codigo <= 48) return '☁️';
   if (codigo <= 67) return '🌧️';
+  if (codigo <= 77) return '❄️';
   if (codigo <= 82) return '🌦️';
   return '⛈️';
 }
 
-function formatearHora(fechaIso: string): string {
-  const hora24 = parseInt(fechaIso.slice(11, 13), 10);
-  if (hora24 === 0) return '12 a.m.';
-  if (hora24 === 12) return '12 p.m.';
-  return hora24 > 12 ? `${hora24 - 12} p.m.` : `${hora24} a.m.`;
+function estadoLluvia(precipitacion: number, codigo: number) {
+  return precipitacion > 0 ||
+    (codigo >= 51 && codigo <= 67) ||
+    (codigo >= 80 && codigo <= 82) ||
+    codigo >= 95;
 }
 
-function formatearDia(fechaIso: string): string {
-  const dias = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
-  const fecha = new Date(`${fechaIso}T12:00:00`);
-  return dias[fecha.getDay()];
+function humedadPorcentaje(valor: number): number {
+  return Math.round(valor <= 1 ? valor * 100 : valor);
 }
 
-async function ContenidoClima() {
+async function ContenidoVeredas() {
   await connection();
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://yixyhbhwfirfuxmawxro.supabase.co';
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_o34p68iXWI_iR8uZnudoxw_yrhDGCoa';
 
-  if (!supabaseUrl || !supabaseKey) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
     return (
-      <main className="p-6 text-center">
-        <p className="text-lg font-bold text-red-700">
-          Faltan configurar las variables de Supabase en Vercel.
-        </p>
+      <main className="p-6 text-center text-red-700">
+        Configura las variables de Supabase.
       </main>
     );
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(url, key);
 
-  const { data: veredasData, error: veredasError } = await supabase.from('veredas').select('*');
-  const { data: nivelesData } = await supabase.from('niveles_humedad').select('*');
+  const [
+    { data: datos, error },
+    { data: niveles, error: errorNiveles },
+  ] = await Promise.all([
+    supabase.from('veredas').select('*'),
+    supabase.from('niveles_humedad').select('*'),
+  ]);
 
-  const veredas: Vereda[] = veredasData ?? [];
-  const niveles: NivelHumedad[] = nivelesData ?? [];
-
-  if (veredas.length === 0) {
+  if (error || errorNiveles) {
     return (
-      <main className="p-6 text-center">
-        <p className="text-lg font-bold text-red-700">
-          No se encontraron veredas. URL: {supabaseUrl} | Error: {veredasError?.message ?? 'ninguno (0 filas)'}
-        </p>
+      <main className="p-6 text-center text-red-700 font-bold">
+        Error de Supabase: {error?.message ?? errorNiveles?.message}
       </main>
     );
   }
 
-  let listaVeredas: any[] = [];
-  try {
-    listaVeredas = await Promise.all(
+  const veredas = limpiarVeredas((datos ?? []) as Vereda[]);
+  const nivelesHumedad = (niveles ?? []) as NivelHumedad[];
+
+  const resultados = await Promise.all(
     veredas.map(async (vereda) => {
-      try { const [lugarDetectado, clima, humedadSuelo] = await Promise.all([
-        Promise.resolve("${vereda.nombre}, ${vereda.municipio}"),
-        consultarClimaAire(vereda.latitud, vereda.longitud),
-        consultarHumedadSuelo(vereda.latitud, vereda.longitud),
-      ]);
+      try {
+        const [clima, suelo] = await Promise.all([
+          consultarClimaAire(vereda.latitud, vereda.longitud),
+          consultarHumedadSuelo(vereda.latitud, vereda.longitud),
+        ]);
 
-      const semaforo = niveles.find(
-        (nivel) =>
-          humedadSuelo.valor >= nivel.minimo && humedadSuelo.valor < nivel.maximo
-      );
+        const humedad = Number(suelo.valor);
 
-      const lloviendo = esClimaLluvioso(
-        clima.current.precipitation,
-        clima.current.weather_code
-      );
+        if (!Number.isFinite(humedad)) {
+          throw new Error('Humedad no disponible');
+        }
 
-      const horaActualIso = clima.current.time.slice(0, 13);
-      const inicioHora = clima.hourly.time.findIndex((t) =>
-        t.startsWith(horaActualIso)
-      );
-      const indiceBase = inicioHora >= 0 ? inicioHora : 0;
+        const semaforo = nivelesHumedad.find(
+          (n) =>
+            humedad >= n.minimo &&
+            humedad < n.maximo
+        );
 
-      const proximasHoras: { hora: string; temp: number; probLluvia: number; icono: string }[] = [];
-      for (
-        let i = indiceBase;
-        i < indiceBase + 24 && i < clima.hourly.time.length;
-        i += 3
-      ) {
-        proximasHoras.push({
-          hora: formatearHora(clima.hourly.time[i]),
-          temp: Math.round(clima.hourly.temperature_2m[i]),
-          probLluvia: clima.hourly.precipitation_probability[i] ?? 0,
-          icono: obtenerIconoClima(clima.hourly.weather_code[i]),
-        });
+        const codigo = clima.current.weather_code;
+        const lluvia = estadoLluvia(
+          clima.current.precipitation,
+          codigo
+        );
+
+        return {
+          vereda,
+          clima,
+          humedad,
+          semaforo,
+          lluvia,
+          error: null,
+        };
+      } catch (e) {
+        console.error(`Error en ${vereda.nombre}:`, e);
+
+        return {
+          vereda,
+          clima: null,
+          humedad: null,
+          semaforo: null,
+          lluvia: false,
+          error: 'No se pudo consultar el clima de esta vereda.',
+        };
       }
-
-      const proximosDias: { dia: string; icono: string; max: number; min: number; esHoy: boolean }[] = clima.daily.time.map((diaIso, idx) => ({
-        dia: formatearDia(diaIso),
-        icono: obtenerIconoClima(clima.daily.weather_code[idx]),
-        max: Math.round(clima.daily.temperature_2m_max[idx]),
-        min: Math.round(clima.daily.temperature_2m_min[idx]),
-        esHoy: idx === 0,
-      }));
-
-      return {
-        vereda,
-        lugarDetectado,
-        clima,
-        humedadSuelo,
-        semaforo,
-        lloviendo,
-        proximasHoras,
-        proximosDias, }; } catch { return null; }
     })
   );
-  } catch (err: any) {
-    return <main className='p-6 text-center font-bold text-red-600'>Error API clima: {err?.message ?? String(err)}</main>;
-  }
 
-  const veredasValidas = listaVeredas.filter((v): v is NonNullable<typeof v> => v !== null);
-  const hayLluviaGeneral = veredasValidas[0]?.lloviendo ?? false;
+  const hayLluvia = resultados.some(
+    (r) => r.clima !== null && r.lluvia
+  );
+
   return (
-    <div
-      className={`min-h-screen w-full overflow-x-hidden pb-24 transition-colors duration-500 ${
-        hayLluviaGeneral
-          ? 'bg-slate-950 text-slate-100'
-          : 'bg-sky-100 text-slate-900'
-      }`}
-    >
-      <header
-        className={`px-4 py-4 sm:p-5 shadow-md transition-colors duration-500 ${
-          hayLluviaGeneral
-            ? 'bg-slate-900 text-white border-b border-slate-800'
-            : 'bg-gradient-to-r from-blue-700 to-sky-600 text-white'
-        }`}
-      >
-        <div className="max-w-lg mx-auto flex justify-between items-center gap-2">
+    <div className={`min-h-screen pb-24 ${
+      hayLluvia
+        ? 'bg-slate-950 text-white'
+        : 'bg-sky-100 text-slate-900'
+    }`}>
+
+      <header className={`px-4 py-5 text-white shadow-lg ${
+        hayLluvia
+          ? 'bg-slate-900'
+          : 'bg-gradient-to-r from-blue-800 to-sky-500'
+      }`}>
+        <div className="max-w-5xl mx-auto flex justify-between items-center">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              upi-camello
+            <h1 className="text-3xl font-black">
+              🌱 upi-camello
             </h1>
-            <p
-              className={`text-xs sm:text-sm mt-0.5 ${
-                hayLluviaGeneral ? 'text-slate-400' : 'text-sky-100'
-              }`}
-            >
-              Clima y humedad de la tierra · Barranca de Upía
+            <p className="text-sm opacity-80">
+              Veredas · Clima y humedad del suelo
+            </p>
+            <p className="text-xs opacity-70 mt-1">
+              Barranca de Upía · Meta, Colombia
             </p>
           </div>
-          <span className="text-3xl sm:text-4xl shrink-0">
-            {hayLluviaGeneral ? '🌧️' : '⛅'}
+          <span className="text-4xl">
+            {hayLluvia ? '🌧️' : '☀️'}
           </span>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-3 py-4 sm:p-4 space-y-5">
-        {veredasValidas.map(
-          ({
-            vereda,
-            lugarDetectado,
-            clima,
-            humedadSuelo,
-            semaforo,
-            lloviendo,
-            proximasHoras,
-            proximosDias,
-          }) => (
-            <article
-              key={vereda.id}
-              className={`rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-lg border transition-colors ${
-                lloviendo
-                  ? 'bg-slate-900 border-slate-800 text-white'
-                  : 'bg-gradient-to-b from-blue-600 to-sky-500 border-blue-400 text-white'
-              }`}
-            >
-              <div className="flex justify-between items-start gap-2 pb-3 sm:pb-4">
-                <div className="min-w-0 flex-1">
-                  <span
-                    className={`inline-block text-[11px] sm:text-xs font-bold uppercase px-2.5 py-0.5 rounded-full mb-1.5 ${
-                      lloviendo
-                        ? 'bg-slate-800 text-sky-400'
-                        : 'bg-white/20 text-white'
-                    }`}
+      <main className="max-w-5xl mx-auto px-3 py-5 space-y-5">
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+
+          <div className="bg-white rounded-2xl p-3 shadow-sm">
+            <p className="text-xs text-slate-500 font-bold">
+              VEREDAS
+            </p>
+            <p className="text-2xl font-black text-blue-800">
+              {veredas.length}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-3 shadow-sm">
+            <p className="text-xs text-slate-500 font-bold">
+              CON CLIMA
+            </p>
+            <p className="text-2xl font-black text-emerald-700">
+              {resultados.filter(r => r.clima !== null).length}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-3 shadow-sm col-span-2 sm:col-span-1">
+            <p className="text-xs text-slate-500 font-bold">
+              CON LLUVIA
+            </p>
+            <p className="text-2xl font-black text-sky-700">
+              {resultados.filter(r => r.clima !== null && r.lluvia).length}
+            </p>
+          </div>
+
+        </div>
+
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-black">
+              📍 Clima por vereda
+            </h2>
+            <p className="text-xs opacity-70">
+              Información meteorológica de cada zona
+            </p>
+          </div>
+          <span className="text-xs font-bold bg-blue-700 text-white px-3 py-2 rounded-full">
+            {veredas.length} lugares
+          </span>
+        </div>
+
+        {resultados.length === 0 ? (
+          <div className="bg-white rounded-2xl p-6 text-center">
+            No hay veredas registradas para este municipio.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            {resultados.map((r) => {
+
+              if (r.error || !r.clima || r.humedad === null) {
+                return (
+                  <article
+                    key={r.vereda.id}
+                    className="bg-white rounded-2xl p-5 border border-red-200 shadow"
                   >
-                    {lloviendo ? '🌧️ Clima lluvioso' : '☀️ Tiempo seco'}
-                  </span>
-                  <h2 className="text-xl sm:text-2xl font-extrabold break-words leading-tight">
-                    {vereda.nombre}
-                  </h2>
-                  <p className="text-xs sm:text-sm opacity-90">
-                    {vereda.municipio}
-                  </p>
-                  <p className="text-[11px] sm:text-xs opacity-75 mt-1 break-words">
-                    📍 {lugarDetectado} ({vereda.latitud}, {vereda.longitud})
-                  </p>
-                </div>
+                    <h3 className="font-black text-lg">
+                      📍 {r.vereda.nombre}
+                    </h3>
+                    <p className="text-sm text-red-600 mt-2">
+                      {r.error}
+                    </p>
+                  </article>
+                );
+              }
 
-                <div className="text-right shrink-0">
-                  <span className="text-4xl sm:text-5xl font-black leading-none">
-                    {Math.round(clima.current.temperature_2m)}°
-                  </span>
-                  <p className="text-[11px] sm:text-xs opacity-80 mt-1.5">
-                    💧 {clima.current.precipitation} mm
-                  </p>
-                  <p className="text-[11px] sm:text-xs opacity-80">
-                    💨 {Math.round(clima.current.wind_speed_10m)} km/h
-                  </p>
-                </div>
-              </div>
+              const clima = r.clima;
+              const porcentaje = humedadPorcentaje(r.humedad);
 
-              {semaforo ? (
-                <div
-                  style={{ backgroundColor: semaforo.color }}
-                  className="text-white p-3.5 sm:p-4 rounded-xl sm:rounded-2xl mb-3 sm:mb-4 shadow-sm border border-white/15"
-                >
-                  <p className="text-base sm:text-lg font-black uppercase tracking-wide">
-                    Tierra {semaforo.nombre}
-                  </p>
-                  <p className="text-xs sm:text-sm font-medium mt-0.5 leading-snug">
-                    {semaforo.mensaje}
-                  </p>
-                  <p className="text-[11px] sm:text-xs opacity-90 mt-1.5">
-                    Humedad estimada: {humedadSuelo.valor} m³/m³
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-black/20 p-3 rounded-xl mb-3">
-                  <p className="text-sm font-bold">
-                    Humedad del suelo: {humedadSuelo.valor} m³/m³
-                  </p>
-                </div>
-              )}
+              return (
+                <article
+                  key={r.vereda.id}
+                  className={`rounded-2xl overflow-hidden shadow-lg border ${
+                    r.lluvia
+                      ? 'bg-slate-900 border-slate-700 text-white'
+                      : 'bg-gradient-to-br from-blue-700 to-sky-500 border-blue-400 text-white'
+                  }`}>
 
-              <div
-                className={`rounded-xl sm:rounded-2xl p-2.5 sm:p-3 mb-2.5 sm:mb-3 ${
-                  lloviendo ? 'bg-slate-800/80' : 'bg-blue-950/20'
-                }`}
-              >
-                <p className="text-[11px] sm:text-xs font-bold uppercase opacity-75 mb-2 px-1">
-                  Por horas
-                </p>
-                <div className="flex overflow-x-auto gap-3 sm:gap-4 pb-1 text-center">
-                  {proximasHoras.map((h: any, i: number) => (
-                    <div
-                      key={i}
-                      className="shrink-0 w-12 sm:w-14 flex flex-col items-center space-y-1"
-                    >
-                      <span className="text-[11px] sm:text-xs opacity-80 font-medium">
-                        {h.hora}
-                      </span>
-                      <span className="text-xl sm:text-2xl">{h.icono}</span>
-                      <span className="text-xs sm:text-sm font-bold">
-                        {h.temp}°
-                      </span>
-                      {h.probLluvia > 0 && (
-                        <span className="text-[10px] sm:text-[11px] font-bold text-sky-300">
-                          💧{h.probLluvia}%
+                  {/* Nombre y temperatura */}
+                  <div className="p-4">
+
+                    <div className="flex justify-between items-start gap-3">
+
+                      <div>
+                        <span className="text-[10px] uppercase font-black bg-white/20 px-2 py-1 rounded-full">
+                          {r.lluvia ? '🌧️ Lluvioso' : '☀️ Tiempo seco'}
                         </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
 
-              <div
-                className={`rounded-xl sm:rounded-2xl p-2.5 sm:p-3 ${
-                  lloviendo ? 'bg-slate-800/80' : 'bg-blue-950/20'
-                }`}
-              >
-                <div className="flex overflow-x-auto gap-1.5 sm:gap-2 text-center">
-                  {proximosDias.map((d: any, i: number) => (
-                    <div
-                      key={i}
-                      className={`shrink-0 w-14 sm:w-16 py-2 px-1 rounded-xl flex flex-col items-center space-y-1 ${
-                        d.esHoy
-                          ? lloviendo
-                            ? 'bg-slate-700/90'
-                            : 'bg-white/25'
-                          : ''
-                      }`}
-                    >
-                      <span className="text-xs sm:text-sm font-semibold">
-                        {d.dia}
-                      </span>
-                      <span className="text-xl sm:text-2xl">{d.icono}</span>
-                      <div className="text-[11px] sm:text-xs font-bold">
-                        <span>{d.max}°</span>{' '}
-                        <span className="opacity-65 font-normal">{d.min}°</span>
+                        <h3 className="text-2xl font-black mt-3">
+                          {r.vereda.nombre}
+                        </h3>
+
+                        <p className="text-xs opacity-80">
+                          {r.vereda.municipio}
+                        </p>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
 
-              <p className="text-[10px] sm:text-[11px] opacity-75 mt-2.5">
-                Estimación para la zona · Actualizado:{' '}
-                {clima.current.time.replace('T', ' ')}
-              </p>
-            </article>
-          )
+                      <div className="text-right">
+                        <span className="text-5xl">
+                          {iconoClima(clima.current.weather_code)}
+                        </span>
+                        <p className="text-4xl font-black mt-1">
+                          {Math.round(clima.current.temperature_2m)}°
+                        </p>
+                      </div>
+
+                    </div>
+
+                    <p className="text-xs opacity-80 mt-3">
+                      📍 {r.vereda.latitud}, {r.vereda.longitud}
+                    </p>
+                  </div>
+
+                  {/* Datos meteorológicos */}
+                  <div className="grid grid-cols-2 gap-2 px-4 pb-4">
+
+                    <div className="bg-white/15 rounded-xl p-3">
+                      <p className="text-xs opacity-75">
+                        💧 Precipitación
+                      </p>
+                      <p className="text-xl font-black">
+                        {clima.current.precipitation} mm
+                      </p>
+                    </div>
+
+                    <div className="bg-white/15 rounded-xl p-3">
+                      <p className="text-xs opacity-75">
+                        💨 Viento
+                      </p>
+                      <p className="text-xl font-black">
+                        {Math.round(clima.current.wind_speed_10m)} km/h
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Humedad del suelo */}
+                  <div className="mx-4 mb-4 bg-white text-slate-900 rounded-xl p-4">
+
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 uppercase">
+                          🌱 Humedad del suelo
+                        </p>
+                        <p className="text-3xl font-black text-blue-800">
+                          {porcentaje}%
+                        </p>
+                      </div>
+
+                      <span className="text-4xl">🌿</span>
+                    </div>
+
+                    <div className="w-full h-3 bg-slate-200 rounded-full mt-3 overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.max(0, Math.min(100, porcentaje))}%`,
+                          backgroundColor: r.semaforo?.color ?? '#2563eb',
+                        }}
+                      />
+                    </div>
+
+                    {r.semaforo ? (
+                      <div
+                        className="mt-3 rounded-xl p-3 text-white"
+                        style={{ backgroundColor: r.semaforo.color }}
+                      >
+                        <p className="font-black uppercase text-sm">
+                          Tierra {r.semaforo.nombre}
+                        </p>
+                        <p className="text-xs mt-1">
+                          {r.semaforo.mensaje}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500 mt-2">
+                        Sin clasificación de humedad configurada.
+                      </p>
+                    )}
+
+                  </div>
+
+                  {/* Pronóstico por horas */}
+                  <div className="px-4 pb-4">
+
+                    <p className="text-xs font-black uppercase mb-3 opacity-80">
+                      Pronóstico por horas
+                    </p>
+
+                    <div className="flex gap-4 overflow-x-auto pb-2">
+
+                      {(() => {
+                        const horaActual = clima.current.time.slice(0, 13);
+                        const inicio = clima.hourly.time.findIndex(
+                          (t: string) => t.startsWith(horaActual)
+                        );
+
+                        const base = inicio >= 0 ? inicio : 0;
+
+                        return Array.from(
+                          { length: 8 },
+                          (_, i) => base + i * 3
+                        )
+                          .filter(i => i < clima.hourly.time.length)
+                          .map(i => (
+                            <div
+                              key={i}
+                              className="shrink-0 text-center min-w-12"
+                            >
+                              <p className="text-[10px] opacity-75">
+                                {clima.hourly.time[i].slice(11, 16)}
+                              </p>
+
+                              <p className="text-2xl my-1">
+                                {iconoClima(clima.hourly.weather_code[i])}
+                              </p>
+
+                              <p className="text-sm font-black">
+                                {Math.round(clima.hourly.temperature_2m[i])}°
+                              </p>
+
+                              <p className="text-[10px] text-sky-200">
+                                💧{clima.hourly.precipitation_probability[i] ?? 0}%
+                              </p>
+                            </div>
+                          ));
+                      })()}
+
+                    </div>
+                  </div>
+
+                  {/* Pronóstico semanal */}
+                  <div className="px-4 pb-4">
+
+                    <p className="text-xs font-black uppercase mb-3 opacity-80">
+                      Próximos días
+                    </p>
+
+                    <div className="grid grid-cols-5 gap-1">
+
+                      {clima.daily.time.slice(0, 5).map(
+                        (dia: string, i: number) => (
+                          <div
+                            key={dia}
+                            className="bg-white/15 rounded-xl p-2 text-center"
+                          >
+                            <p className="text-[10px] font-bold">
+                              {new Date(`${dia}T12:00:00`).toLocaleDateString(
+                                'es-CO',
+                                { weekday: 'short' }
+                              )}
+                            </p>
+
+                            <p className="text-xl my-1">
+                              {iconoClima(clima.daily.weather_code[i])}
+                            </p>
+
+                            <p className="text-xs font-black">
+                              {Math.round(clima.daily.temperature_2m_max[i])}°
+                            </p>
+
+                            <p className="text-[10px] opacity-70">
+                              {Math.round(clima.daily.temperature_2m_min[i])}°
+                            </p>
+                          </div>
+                        )
+                      )}
+
+                    </div>
+                  </div>
+
+                  <div className="bg-black/15 px-4 py-3 text-[10px] opacity-75">
+                    Actualizado: {clima.current.time.replace('T', ' ')}
+                  </div>
+
+                </article>
+              );
+            })}
+
+          </div>
         )}
 
-        <footer
-          className={`text-center text-xs pt-2 space-y-1 ${
-            hayLluviaGeneral ? 'text-slate-400' : 'text-slate-600'
-          }`}
-        >
-          <p>
-            Clima y suelo por{' '}
-            <a
-              href="https://open-meteo.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-bold underline"
-            >
-              Open-Meteo.com
-            </a>
-          </p>
-          <p>Ubicación por OpenStreetMap (Nominatim)</p>
+        <footer className="text-center text-xs opacity-60 py-4">
+          <p>Datos meteorológicos: Open-Meteo</p>
+          <p>Humedad del suelo: estimación del servicio configurado</p>
+          <p>upi-camello · Barranca de Upía, Meta</p>
         </footer>
+
       </main>
 
-      <nav
-        className={`fixed bottom-0 left-0 right-0 border-t p-2.5 sm:p-3 shadow-lg transition-colors ${
-          hayLluviaGeneral
-            ? 'bg-slate-950 border-slate-800 text-slate-200'
-            : 'bg-white border-sky-200 text-slate-800'
-        }`}
-      >
-        <div className="max-w-lg mx-auto grid grid-cols-3 gap-2 text-center font-bold text-sm sm:text-base">
+      <nav className={`fixed bottom-0 left-0 right-0 border-t p-3 shadow-lg ${
+        hayLluvia
+          ? 'bg-slate-950 border-slate-800 text-white'
+          : 'bg-white border-sky-200 text-slate-800'
+      }`}>
+        <div className="max-w-lg mx-auto grid grid-cols-3 gap-2 text-center font-bold text-sm">
+
           <Link
             href="/"
-            className={`py-2 rounded-xl text-white ${
-              hayLluviaGeneral ? 'bg-blue-600' : 'bg-blue-700'
-            }`}
-          >Veredas</Link>
+            className="py-2 rounded-xl bg-blue-700 text-white"
+          >
+            Veredas
+          </Link>
+
           <Link
             href="/mi-finca"
-            className={`py-2 rounded-xl ${
-              hayLluviaGeneral ? 'hover:bg-slate-800' : 'hover:bg-sky-50'
-            }`}
-          >Mi finca</Link>
+            className="py-2 rounded-xl hover:bg-sky-100"
+          >
+            Mi finca
+          </Link>
+
           <Link
             href="/mapa"
-            className={`py-2 rounded-xl ${
-              hayLluviaGeneral ? 'hover:bg-slate-800' : 'hover:bg-sky-50'
-            }`}
-          >Mapa</Link>
+            className="py-2 rounded-xl hover:bg-sky-100"
+          >
+            Mapa
+          </Link>
+
         </div>
       </nav>
+
     </div>
   );
 }
@@ -387,28 +545,18 @@ export default function PaginaPrincipal() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-sky-100 flex flex-col items-center justify-center p-6 text-center text-blue-900">
-          <span className="text-5xl mb-3 animate-bounce">⛅</span>
-          <p className="text-xl font-black">Cargando clima y tierra...</p>
-          <p className="text-sm opacity-75 mt-1">Barranca de Upía</p>
+        <div className="min-h-screen bg-sky-100 flex flex-col items-center justify-center text-blue-900">
+          <span className="text-5xl animate-bounce">🌱</span>
+          <h1 className="text-xl font-black mt-3">
+            Cargando veredas...
+          </h1>
+          <p className="text-sm mt-1">
+            Consultando clima y humedad
+          </p>
         </div>
       }
     >
-      <ContenidoClima />
+      <ContenidoVeredas />
     </Suspense>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-

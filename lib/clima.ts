@@ -1,28 +1,4 @@
-// --- API 1: Pregunta qué lugar corresponde a las coordenadas (OpenStreetMap) ---
-export async function consultarLugarPorCoordenadas(
-  lat: number,
-  lon: number
-): Promise<string> {
-  const url = `https://openstreetmap.org{lat}&lon=${lon}&zoom=14&addressdetails=1`;
 
-  const respuesta = await fetch(url, {
-    headers: { 'User-Agent': 'upi-camello-app/1.0' },
-    next: { revalidate: 86400 },
-  });
-
-  if (!respuesta.ok) return 'Zona rural de Barranca de Upía';
-
-  const datos = await respuesta.json();
-  return (
-    datos.address?.village ||
-    datos.address?.hamlet ||
-    datos.address?.town ||
-    datos.address?.city ||
-    'Zona rural'
-  );
-}
-
-// --- API 2: Clima actual + Pronóstico por horas + Pronóstico de 7 días ---
 export interface DatosClimaCompleto {
   current: {
     time: string;
@@ -46,55 +22,174 @@ export interface DatosClimaCompleto {
   };
 }
 
-export async function consultarClimaAire(
-  lat: number,
-  lon: number
-): Promise<DatosClimaCompleto> {
-  const url = `https://open-meteo.com{lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code&hourly=temperature_2m,precipitation_probability,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=America/Bogota&forecast_days=7`;
-
-  const respuesta = await fetch(url, {
-    next: { revalidate: 900 },
-  });
-
-  if (!respuesta.ok) {
-    throw new Error('Error consultando clima');
-  }
-
-  return respuesta.json();
-}
-
-// --- API 3: Toma únicamente la humedad del suelo de esa coordenada ---
 export interface DatosHumedadSuelo {
   valor: number;
   hora: string;
 }
 
-export async function consultarHumedadSuelo(
+const validarCoordenadas = (lat: number, lon: number) => {
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lon) ||
+    lat < -90 || lat > 90 ||
+    lon < -180 || lon > 180
+  ) {
+    throw new Error("Las coordenadas geográficas no son válidas.");
+  }
+};
+
+// API 1: OpenStreetMap - identificar ubicación
+export async function consultarLugarPorCoordenadas(
   lat: number,
   lon: number
-): Promise<DatosHumedadSuelo> {
-  const url = `https://open-meteo.com{lat}&longitude=${lon}&hourly=soil_moisture_3_to_9cm&timezone=America/Bogota&forecast_days=1`;
+): Promise<string> {
+  validarCoordenadas(lat, lon);
+
+  const parametros = new URLSearchParams({
+    format: "jsonv2",
+    lat: String(lat),
+    lon: String(lon),
+    zoom: "14",
+    addressdetails: "1",
+  });
+
+  const url = `https://nominatim.openstreetmap.org/reverse?${parametros}`;
+
+  try {
+    const respuesta = await fetch(url, {
+      headers: {
+        "User-Agent": "upi-camello-app/1.0 (weather application)",
+        "Accept": "application/json",
+      },
+      next: { revalidate: 86400 },
+    });
+
+    if (!respuesta.ok) {
+      console.error("Error de Nominatim:", respuesta.status);
+      return "Zona rural de Barranca de Upía";
+    }
+
+    const datos = await respuesta.json();
+    const direccion = datos.address;
+
+    return (
+      direccion?.village ||
+      direccion?.hamlet ||
+      direccion?.town ||
+      direccion?.city ||
+      direccion?.municipality ||
+      direccion?.county ||
+      "Zona rural"
+    );
+  } catch (error) {
+    console.error("Error consultando ubicación:", error);
+    return "Zona rural de Barranca de Upía";
+  }
+}
+
+// API 2: Open-Meteo - clima actual y pronóstico
+export async function consultarClimaAire(
+  lat: number,
+  lon: number
+): Promise<DatosClimaCompleto> {
+  validarCoordenadas(lat, lon);
+
+  const parametros = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lon),
+    current:
+      "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,weather_code",
+    hourly:
+      "temperature_2m,precipitation_probability,weather_code",
+    daily:
+      "weather_code,temperature_2m_max,temperature_2m_min",
+    timezone: "America/Bogota",
+    forecast_days: "7",
+  });
+
+  const url = `https://api.open-meteo.com/v1/forecast?${parametros}`;
 
   const respuesta = await fetch(url, {
     next: { revalidate: 900 },
   });
 
   if (!respuesta.ok) {
-    throw new Error('Error consultando humedad del suelo');
+    const detalle = await respuesta.text();
+    console.error("Open-Meteo:", respuesta.status, detalle);
+    throw new Error(
+      `Open-Meteo respondió con el estado ${respuesta.status}`
+    );
   }
 
   const datos = await respuesta.json();
+
+  if (!datos.current || !datos.hourly || !datos.daily) {
+    throw new Error("Open-Meteo devolvió datos incompletos.");
+  }
+
+  return datos as DatosClimaCompleto;
+}
+
+// API 3: Open-Meteo - humedad del suelo
+export async function consultarHumedadSuelo(
+  lat: number,
+  lon: number
+): Promise<DatosHumedadSuelo> {
+  validarCoordenadas(lat, lon);
+
+  const parametros = new URLSearchParams({
+    latitude: String(lat),
+    longitude: String(lon),
+    hourly: "soil_moisture_3_to_9cm",
+    timezone: "America/Bogota",
+    forecast_days: "1",
+  });
+
+  const url = `https://api.open-meteo.com/v1/forecast?${parametros}`;
+
+  const respuesta = await fetch(url, {
+    next: { revalidate: 900 },
+  });
+
+  if (!respuesta.ok) {
+    const detalle = await respuesta.text();
+    console.error("Error de humedad del suelo:", respuesta.status, detalle);
+    throw new Error(
+      `Error consultando humedad del suelo: ${respuesta.status}`
+    );
+  }
+
+  const datos = await respuesta.json();
+
+  const tiempos: string[] = datos.hourly?.time ?? [];
+  const valores: (number | null)[] =
+    datos.hourly?.soil_moisture_3_to_9cm ?? [];
+
+  if (tiempos.length === 0 || valores.length === 0) {
+    throw new Error("No hay datos disponibles de humedad del suelo.");
+  }
+
   const horaColombia = new Date()
-    .toLocaleString('sv-SE', { timeZone: 'America/Bogota' })
+    .toLocaleString("sv-SE", { timeZone: "America/Bogota" })
     .slice(0, 13)
-    .replace(' ', 'T');
-  const indice = datos.hourly.time.findIndex((t: string) =>
-    t.startsWith(horaColombia)
+    .replace(" ", "T");
+
+  let indice = tiempos.findIndex((hora) =>
+    hora.startsWith(horaColombia)
   );
-  const indiceValido = indice >= 0 ? indice : 0;
+
+  if (indice < 0) {
+    indice = 0;
+  }
+
+  const valor = valores[indice];
+
+  if (valor === null || valor === undefined) {
+    throw new Error("La humedad del suelo no está disponible para esta hora.");
+  }
 
   return {
-    valor: datos.hourly.soil_moisture_3_to_9cm[indiceValido] ?? 0,
-    hora: datos.hourly.time[indiceValido] ?? '',
+    valor,
+    hora: tiempos[indice],
   };
 }

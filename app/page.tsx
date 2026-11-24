@@ -90,6 +90,17 @@ function limpiarVeredas(veredas: Vereda[]) {
 
     const clave = normalizar(vereda.nombre);
 
+    // CORRECCIÓN: COORDENADAS DE LAS MORAS
+    if (clave === 'las moras') {
+      vereda.latitud =
+        vereda.latitud ?? 4.523200;
+
+      vereda.longitud =
+        vereda.longitud ?? -72.949840;
+
+      vereda.municipio = 'Barranca de Upía, Meta';
+    }
+
     if (!unicas.has(clave)) {
       unicas.set(clave, vereda);
     }
@@ -98,11 +109,11 @@ function limpiarVeredas(veredas: Vereda[]) {
   // Agregar Las Moras solamente si no existe.
   if (!unicas.has('las moras')) {
     unicas.set('las moras', {
-      id: 'las-moras-pendiente',
+      id: 'las-moras',
       nombre: 'Las Moras',
       municipio: 'Barranca de Upía, Meta',
-      latitud: null,
-      longitud: null,
+      latitud: 4.523200,
+      longitud: -72.949840,
     });
   }
 
